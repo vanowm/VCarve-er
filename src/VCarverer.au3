@@ -5,7 +5,7 @@
 #AutoIt3Wrapper_Compression=4
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Description=VCarver'er - show messages popups as toast notifications
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.36
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.38
 #AutoIt3Wrapper_Res_Fileversion_AutoIncrement=y
 #AutoIt3Wrapper_Res_ProductVersion=1.0.0
 #AutoIt3Wrapper_Res_LegalCopyright=©V@no 2024
@@ -34,7 +34,7 @@
 ;~ _UWPOCR_Log(__UWPOCR_Log)
 #include <GuiConstants.au3>
 
-Global Const $VERSION = "1.0.0.36"
+Global Const $VERSION = "1.0.0.38"
 Global Const $stopFile = @ScriptDir & "\.stop"
 Global Const $imagePath = "dialog.png" ; temporary image file
 Global Const $timeout = 10000 ; notification message timeout in milliseconds
@@ -155,8 +155,8 @@ Func processPopup()
 	debug("popup detected")
 	Local $start = TimerInit()
 	Local $winPos = WinGetPos($hwnd)
-	Local $button1Hwnd = ControlGetHandle($hwnd, "", $button1)
-	Local $button1Pos = ControlGetPos($hwnd, "", $button1Hwnd)
+	Local $hButton1 = ControlGetHandle($hwnd, "", $button1)
+	Local $button1Pos = ControlGetPos($hwnd, "", $hButton1)
 	Local $isConfirm = ControlGetHandle($hwnd, "", $button2)
 	If $isConfirm Then
 		movePopup($winPos, $button1Pos)
@@ -174,7 +174,7 @@ Func processPopup()
 		EndIf
 		If Not $button1Pos[1] Then
 			For $i = 0 To 100
-				$button1Pos = ControlGetPos($hwnd, "", $button1Hwnd)
+				$button1Pos = ControlGetPos($hwnd, "", $hButton1)
 				If $button1Pos[1] Then
 
 					ExitLoop
@@ -195,7 +195,7 @@ Func processPopup()
 		$posWidth = 0
 		$posLeft = $iRight
 		$posTop = $iBottom - $imgPos[3] + ($isWin11 ? 0 : $iBorder)
-		$posHeight = $imgPos[3] - ($isWin11 ? -$iBorder / 2 : $iBorder)
+		$posHeight = $imgPos[3] - ($isWin11 ? -$iBorder * 2 : $iBorder)
 		WinMove($hToast, "", $posLeft, $posTop, $posWidth, $posHeight)
 		GUICtrlSetPos($idPic, 0, 0, 0, 0)
 		GUICtrlSetPos($idPic, 0, 0, $posWidthDest, $posHeight)
@@ -206,7 +206,9 @@ Func processPopup()
 		Local $hSrcDC = _WinAPI_CreateCompatibleDC($hDC)
 		Local $hBmp = _WinAPI_CreateCompatibleBitmap($hDC, $posWidthDest, $posHeight < 40 ? 40 : $posHeight)
 		Local $hSrcSv = _WinAPI_SelectObject($hSrcDC, $hBmp)
+		If $isWin11 Then ControlHide($hToast, "", $hButton1)
 		_WinAPI_PrintWindow($hwnd, $hSrcDC, True)
+		If $isWin11 Then ControlShow($hToast, "", $hButton1)
 		debug("print", TimerDiff($start))
 		_ScreenCapture_SaveImage($imagePath, $hBmp, True)
 		Local $sText = StringStripWS(_UWPOCR_GetText($imagePath, Default, True), 3)
@@ -226,7 +228,7 @@ Func processPopup()
 			GUISetState(@SW_SHOWNOACTIVATE)
 			$popupTime = TimerInit()
 			debug("show", TimerDiff($start))
-			ControlClick($hwnd, "", $button1Hwnd)
+			ControlClick($hwnd, "", $hButton1)
 ;~ WinClose($hwnd)
 			debug("close", TimerDiff($start))
 		EndIf
