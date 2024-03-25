@@ -5,7 +5,7 @@
 #AutoIt3Wrapper_Compression=4
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Description=VCarver'er - show messages popups as toast notifications
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.35
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.36
 #AutoIt3Wrapper_Res_Fileversion_AutoIncrement=y
 #AutoIt3Wrapper_Res_ProductVersion=1.0.0
 #AutoIt3Wrapper_Res_LegalCopyright=©V@no 2024
@@ -34,7 +34,7 @@
 ;~ _UWPOCR_Log(__UWPOCR_Log)
 #include <GuiConstants.au3>
 
-Global Const $VERSION = "1.0.0.35"
+Global Const $VERSION = "1.0.0.36"
 Global Const $stopFile = @ScriptDir & "\.stop"
 Global Const $imagePath = "dialog.png" ; temporary image file
 Global Const $timeout = 10000 ; notification message timeout in milliseconds
@@ -183,18 +183,19 @@ Func processPopup()
 			Next
 		EndIf
 		$imgPos[3] -= $imgPos[3] - $button1Pos[1]
+		Local Static $isWin11 = @OSVersion = "WIN_11"
 		Local $iBorder = _WinAPI_GetSystemMetrics($SM_CXSIZEFRAME) / 2 - 0
 		; Extract the coordinates of the primary monitor's display area
 		Local $tRect = _WinAPI_GetWorkArea()
 		; Get the bottom right corner
 		Local $iRight = DllStructGetData($tRect, "Right")
 		Local $iBottom = DllStructGetData($tRect, "Bottom")
-		$posWidthDest = $imgPos[2] - $iBorder * 2
+		$posWidthDest = $imgPos[2] - $iBorder * ($isWin11 ? 4 : 2)
 		$speed = $posWidthDest / $animationSpeed
 		$posWidth = 0
 		$posLeft = $iRight
-		$posTop = $iBottom - $imgPos[3] + $iBorder
-		$posHeight = $imgPos[3] - $iBorder
+		$posTop = $iBottom - $imgPos[3] + ($isWin11 ? 0 : $iBorder)
+		$posHeight = $imgPos[3] - ($isWin11 ? -$iBorder / 2 : $iBorder)
 		WinMove($hToast, "", $posLeft, $posTop, $posWidth, $posHeight)
 		GUICtrlSetPos($idPic, 0, 0, 0, 0)
 		GUICtrlSetPos($idPic, 0, 0, $posWidthDest, $posHeight)
@@ -203,7 +204,7 @@ Func processPopup()
 		Local $hBitmap = _WinAPI_CreateCompatibleBitmap($hDC, $posWidthDest, $posHeight)
 		Local $hDestSv = _WinAPI_SelectObject($hDestDC, $hBitmap)
 		Local $hSrcDC = _WinAPI_CreateCompatibleDC($hDC)
-		Local $hBmp = _WinAPI_CreateCompatibleBitmap($hDC, $posWidthDest, $posHeight + 2)
+		Local $hBmp = _WinAPI_CreateCompatibleBitmap($hDC, $posWidthDest, $posHeight < 40 ? 40 : $posHeight)
 		Local $hSrcSv = _WinAPI_SelectObject($hSrcDC, $hBmp)
 		_WinAPI_PrintWindow($hwnd, $hSrcDC, True)
 		debug("print", TimerDiff($start))
