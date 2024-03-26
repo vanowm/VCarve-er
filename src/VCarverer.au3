@@ -63,10 +63,60 @@ If _Singleton("VCarverer", 1) = 0 Then
 EndIf
 
 Opt('TrayAutoPause', 0)
-Opt("WinTitleMatchMode", 3)
 OnAutoItExitRegister("_exit")
 TraySetToolTip("VCarver'er " & $VERSION)
 FileCreateShortcut(@ScriptFullPath, @StartupDir & "\VCarverer.lnk")
+Global $hEventProc = DllCallbackRegister(_EventProc, 'none', 'ptr;dword;hwnd;long;long;dword;dword')
+Global $hEventHook
+Global $map[]
+$map[0x00000001] = "$EVENT_MIN"
+$map[0x00000001] = "$EVENT_SYSTEM_SOUND"
+$map[0x00000002] = "$EVENT_SYSTEM_ALERT"
+$map[0x00000003] = "$EVENT_SYSTEM_FOREGROUND"
+$map[0x00000004] = "$EVENT_SYSTEM_MENUSTART"
+$map[0x00000005] = "$EVENT_SYSTEM_MENUEND"
+$map[0x00000006] = "$EVENT_SYSTEM_MENUPOPUPSTART"
+$map[0x00000007] = "$EVENT_SYSTEM_MENUPOPUPEND"
+$map[0x00000008] = "$EVENT_SYSTEM_CAPTURESTART"
+$map[0x00000009] = "$EVENT_SYSTEM_CAPTUREEND"
+$map[0x0000000A] = "$EVENT_SYSTEM_MOVESIZESTART"
+$map[0x0000000B] = "$EVENT_SYSTEM_MOVESIZEEND"
+$map[0x0000000C] = "$EVENT_SYSTEM_CONTEXTHELPSTART"
+$map[0x0000000D] = "$EVENT_SYSTEM_CONTEXTHELPEND"
+$map[0x0000000E] = "$EVENT_SYSTEM_DRAGDROPSTART"
+$map[0x0000000F] = "$EVENT_SYSTEM_DRAGDROPEND"
+$map[0x00000010] = "$EVENT_SYSTEM_DIALOGSTART"
+$map[0x00000011] = "$EVENT_SYSTEM_DIALOGEND"
+$map[0x00000012] = "$EVENT_SYSTEM_SCROLLINGSTART"
+$map[0x00000013] = "$EVENT_SYSTEM_SCROLLINGEND"
+$map[0x00000014] = "$EVENT_SYSTEM_SWITCHSTART"
+$map[0x00000015] = "$EVENT_SYSTEM_SWITCHEND"
+$map[0x00000016] = "$EVENT_SYSTEM_MINIMIZESTART"
+$map[0x00000017] = "$EVENT_SYSTEM_MINIMIZEEND"
+$map[0x00000020] = "$EVENT_SYSTEM_DESKTOPSWITCH"
+$map[0x00008000] = "$EVENT_OBJECT_CREATE"
+$map[0x00008001] = "$EVENT_OBJECT_DESTROY"
+$map[0x00008002] = "$EVENT_OBJECT_SHOW"
+$map[0x00008003] = "$EVENT_OBJECT_HIDE"
+$map[0x00008004] = "$EVENT_OBJECT_REORDER"
+$map[0x00008005] = "$EVENT_OBJECT_FOCUS"
+$map[0x00008006] = "$EVENT_OBJECT_SELECTION"
+$map[0x00008007] = "$EVENT_OBJECT_SELECTIONADD"
+$map[0x00008008] = "$EVENT_OBJECT_SELECTIONREMOVE"
+$map[0x00008009] = "$EVENT_OBJECT_SELECTIONWITHIN"
+$map[0x0000800A] = "$EVENT_OBJECT_STATECHANGE"
+$map[0x0000800B] = "$EVENT_OBJECT_LOCATIONCHANGE"
+$map[0x0000800C] = "$EVENT_OBJECT_NAMECHANGE"
+$map[0x0000800D] = "$EVENT_OBJECT_DESCRIPTIONCHANGE"
+$map[0x0000800E] = "$EVENT_OBJECT_VALUECHANGE"
+$map[0x0000800F] = "$EVENT_OBJECT_PARENTCHANGE"
+$map[0x00008010] = "$EVENT_OBJECT_HELPCHANGE"
+$map[0x00008011] = "$EVENT_OBJECT_DEFACTIONCHANGE"
+$map[0x00008012] = "$EVENT_OBJECT_ACCELERATORCHANGE"
+$map[0x00008013] = "$EVENT_OBJECT_INVOKED"
+$map[0x00008014] = "$EVENT_OBJECT_TEXTSELECTIONCHANGED"
+$map[0x00008015] = "$EVENT_OBJECT_CONTENTSCROLLED"
+$map[0x7FFFFFFF] = "$EVENT_MAX"
 While 1
 	If FileExists($stopFile) Then
 		FileDelete($stopFile)
@@ -101,19 +151,39 @@ While 1
 				EndIf
 			Next
 		EndIf
+	Else
+;~ 	Opt("WinTitleMatchMode", 1) ;;
+;~ 	Local $hwnd = WinWaitActive("[TITLE:VCarve Pro]") ;;
+;~ 	If $hwnd <> $prevHwnd Then ;;
+;~ 		$prevHwnd = $hwnd ;;
+;~ 		Local $iPID = WinGetProcess($hwnd) ;;
+;~ 		_WinAPI_UnhookWinEvent($hEventHook) ;;
+;~ 		Global $hEventHook = _WinAPI_SetWinEventHook(0x7FFFFF30, 0x7FFFFF30, DllCallbackGetPtr($hEventProc), $iPID) ;;
+;~ 		ConsoleWrite("PID: " & $iPID & @CRLF) ;;
+;~ 	EndIf ;;
 	EndIf
 	$hwnd = WinGetHandle($class)
 
 	If $hwnd And $hwnd <> $prevHwnd Then
 		$prevHwnd = $hwnd
-		processPopup()
+		processPopup($hwnd)
 	EndIf
 
 	Sleep(10)
 WEnd
+Func _EventProc($hEventHook, $iEvent, $hwnd, $iObjectID, $iChildID, $iThreadId, $iEventTime) ;;
+	ConsoleWrite(($map[$iEvent] ? $map[$iEvent] : "0x" & Hex($iEvent, 8)) & " | " & $iObjectID & " | " & $iChildID & " | " & $iThreadId & " | " & $iEventTime & @CRLF)
+	Opt("WinTitleMatchMode", 3)
+	Local $hPopup = WinGetHandle($class)
+	If $hPopup Then
+		processPopup($hPopup)
+	EndIf
+EndFunc   ;==>_EventProc
 
 Func _exit()
 	DllClose($hUser32_Dll)
+	_WinAPI_UnhookWinEvent($hEventHook) ;;
+	DllCallbackFree($hEventProc) ;;
 	FileDelete($imagePath)
 	debug("exit")
 EndFunc   ;==>_exit
@@ -122,7 +192,7 @@ Func closePopup()
 	$posWidthDest = 0
 EndFunc   ;==>closePopup
 
-Func movePopup($winPos = WinGetPos($hwnd), $button1Pos = ControlGetPos($hwnd, "", $button1))
+Func movePopup($hPopup, $winPos = WinGetPos($hPopup), $button1Pos = ControlGetPos($hPopup, "", $button1))
 	; Calculate the new window position based on the button position and current cursor position
 	Local $newX = MouseGetPos(0) - $button1Pos[0] - $button1Pos[2] / 2
 	Local $newY = MouseGetPos(1) - $button1Pos[1] - $button1Pos[3] * 1.5
@@ -147,25 +217,25 @@ Func movePopup($winPos = WinGetPos($hwnd), $button1Pos = ControlGetPos($hwnd, ""
 	If $newX < $rectX Then $newX = $rectX
 	If $newY < $rectY Then $newY = $rectY
 	; Move the message box window to the new position
-	WinMove($hwnd, "", $newX, $newY, $winPos[2], $winPos[3])
-	WinActivate($hwnd)
+	WinMove($hPopup, "", $newX, $newY, $winPos[2], $winPos[3])
+	WinActivate($hPopup)
 EndFunc   ;==>movePopup
 
-Func processPopup()
+Func processPopup($hPopup)
 	debug("popup detected")
 	Local $start = TimerInit()
-	Local $winPos = WinGetPos($hwnd)
-	Local $hButton1 = ControlGetHandle($hwnd, "", $button1)
-	Local $button1Pos = ControlGetPos($hwnd, "", $hButton1)
-	Local $isConfirm = ControlGetHandle($hwnd, "", $button2)
+	Local $winPos = WinGetPos($hPopup)
+	Local $hButton1 = ControlGetHandle($hPopup, "", $button1)
+	Local $button1Pos = ControlGetPos($hPopup, "", $hButton1)
+	Local $isConfirm = ControlGetHandle($hPopup, "", $button2)
 	If $isConfirm Then
-		movePopup($winPos, $button1Pos)
+		movePopup($hPopup, $winPos, $button1Pos)
 	Else
-		WinMove($hwnd, "", $posOut, $posOut)
+		WinMove($hPopup, "", $posOut, $posOut)
 		Local $imgPos = $winPos
 		If Not $imgPos[3] Then
 			For $i = 0 To 100
-				$imgPos = WinGetPos($hwnd)
+				$imgPos = WinGetPos($hPopup)
 				If $imgPos[3] Then
 					ExitLoop
 				EndIf
@@ -174,7 +244,7 @@ Func processPopup()
 		EndIf
 		If Not $button1Pos[1] Then
 			For $i = 0 To 100
-				$button1Pos = ControlGetPos($hwnd, "", $hButton1)
+				$button1Pos = ControlGetPos($hPopup, "", $hButton1)
 				If $button1Pos[1] Then
 
 					ExitLoop
@@ -207,7 +277,7 @@ Func processPopup()
 		Local $hBmp = _WinAPI_CreateCompatibleBitmap($hDC, $posWidthDest, $posHeight < 40 ? 40 : $posHeight)
 		Local $hSrcSv = _WinAPI_SelectObject($hSrcDC, $hBmp)
 		If $isWin11 Then ControlHide($hToast, "", $hButton1)
-		_WinAPI_PrintWindow($hwnd, $hSrcDC, True)
+		_WinAPI_PrintWindow($hPopup, $hSrcDC, True)
 		If $isWin11 Then ControlShow($hToast, "", $hButton1)
 		debug("print", TimerDiff($start))
 		_ScreenCapture_SaveImage($imagePath, $hBmp, True)
@@ -215,7 +285,7 @@ Func processPopup()
 		debug($sText)
 		debug("text", TimerDiff($start))
 		If Not $sText Or StringRegExp($sText, "error|exceed") Then
-			movePopup($winPos, $button1Pos)
+			movePopup($hPopup, $winPos, $button1Pos)
 		Else
 			_WinAPI_BitBlt($hDestDC, 0, 0, $posWidthDest, $posHeight, $hSrcDC, 0, 0, $MERGECOPY)
 			; Set bitmap to control
@@ -228,8 +298,8 @@ Func processPopup()
 			GUISetState(@SW_SHOWNOACTIVATE)
 			$popupTime = TimerInit()
 			debug("show", TimerDiff($start))
-			ControlClick($hwnd, "", $hButton1)
-;~ WinClose($hwnd)
+			ControlClick($hPopup, "", $hButton1)
+;~ WinClose($hPopup)
 			debug("close", TimerDiff($start))
 			TrayTip("VCarver'er", $sText, 1)
 		EndIf
