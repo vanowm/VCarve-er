@@ -231,6 +231,7 @@ Func processPopup()
 			ControlClick($hwnd, "", $hButton1)
 ;~ WinClose($hwnd)
 			debug("close", TimerDiff($start))
+			TrayTip("VCarver'er", $sText, 1)
 		EndIf
 
 		_WinAPI_ReleaseDC($hPic, $hDC)
