@@ -42,7 +42,7 @@ Global Const $stopFile = @ScriptDir & "\.stop"
 Global Const $imagePath = "dialog.png" ; temporary image file
 Global Const $timeout = 10000 ; notification message timeout in milliseconds
 Global Const $animationSpeed = 4 ; animation speed 1 = fastest
-Global Const $class = "[CLASS:#32770; TITLE:VCarve Pro]"
+;~ Global Const $class = "[CLASS:#32770; TITLE:VCarve Pro]"
 Global Const $button1 = "[CLASS:Button; INSTANCE:1]"
 Global Const $button2 = "[CLASS:Button; INSTANCE:2]"
 Global Const $posOut = -999999999999999999 ;move message box outside visible area
@@ -52,8 +52,9 @@ Global Const $hPic = GUICtrlGetHandle($idPic)
 Global Const $hUser32_Dll = DllOpen("user32.dll")
 Global $ini = @ScriptDir & "\VCarve'er.ini"
 Global $iniSection = "Settings"
-Global $settingType = IniRead($ini, $iniSection, "type", 1) ; 0 = default popup; 1 = image; 2 = toast/balloon; 3 = none
-Global $settingMove = IniRead($ini, $iniSection, "move", True) ; move popup to cursor position
+Global $settingType = Number(IniRead($ini, $iniSection, "type", 1)) ; 0 = default popup; 1 = image; 2 = toast/balloon; 3 = none
+Global $settingMove = Number(IniRead($ini, $iniSection, "move", 1)) ; move popup to cursor position
+Global $settingAutoStart = Number(IniRead($ini, $iniSection, "autoStart", 1)) ; auto start with Windows
 Global $popupTime
 Global $posWidthDest
 Global $posWidth
@@ -65,15 +66,11 @@ Global $step
 Local $hwnd
 Local $prevHwnd
 
-
-If Not FileExists($ini) Then
-	IniWrite($ini, $iniSection, "Move", $settingMove)
-	IniWrite($ini, $iniSection, "Type", $settingType)
-EndIf
 If _Singleton("VCarve'er", 1) = 0 Then
 	Exit
 EndIf
 
+Opt("WinTitleMatchMode", 3)
 Opt('TrayAutoPause', 0)
 Opt("TrayMenuMode", 7) ; Default tray menu items will not be shown and must be explicitly added
 Opt("TrayOnEventMode", 1) ; Enable TrayOnEventMode.
@@ -94,96 +91,16 @@ Global $trayType3 = TrayCreateItem("None", $trayType, -1, 1)
 TrayItemSetOnEvent(-1, "TrayEvent")
 Global $trayMove = TrayCreateItem("Move popups")
 TrayItemSetOnEvent(-1, "TrayEvent")
+Global $trayAutoStart = TrayCreateItem("Auto start")
+TrayItemSetOnEvent(-1, "TrayEvent")
 TrayCreateItem("")
 Global $trayExit = TrayCreateItem("Exit")
 TrayItemSetOnEvent(-1, "TrayEvent")
-
 setTray()
-Func setTray()
-	TrayItemSetState($trayMove, $settingMove ? $TRAY_CHECKED : $TRAY_UNCHECKED)
-	TrayItemSetState($trayType0, $settingType = 0 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
-	TrayItemSetState($trayType1, $settingType = 1 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
-	TrayItemSetState($trayType2, $settingType = 2 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
-	TrayItemSetState($trayType3, $settingType = 3 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
-EndFunc   ;==>setTray
 
-Func iniSave()
-	IniWrite($ini, $iniSection, "Move", $settingMove)
-	IniWrite($ini, $iniSection, "Type", $settingType)
-EndFunc   ;==>iniSave
-Func TrayEvent()
-	Switch @TRAY_ID
-		Case $trayMove
-			$settingMove = Not BitAND(TrayItemGetState($trayMove), $TRAY_CHECKED)
-		Case $trayType0
-			$settingType = 0
-		Case $trayType1
-			$settingType = 1
-		Case $trayType2
-			$settingType = 2
-		Case $trayType3
-			$settingType = 3
-		Case $trayExit
-			Exit
-	EndSwitch
+Global $hHookFunc = DllCallbackRegister('_WinEventProc', 'none', 'ptr;uint;hwnd;int;int;uint;uint')
+Global $hWinHook = _WinAPI_SetWinEventHook($EVENT_OBJECT_CREATE, $EVENT_OBJECT_CREATE, DllCallbackGetPtr($hHookFunc))
 
-	setTray()
-	iniSave()
-EndFunc   ;==>TrayEvent
-
-
-FileCreateShortcut(@ScriptFullPath, @StartupDir & "\VCarve'er.lnk")
-Global $hEventProc = DllCallbackRegister(_EventProc, 'none', 'ptr;dword;hwnd;long;long;dword;dword')
-Global $hEventHook
-Global $map[]
-$map[0x00000001] = "$EVENT_MIN"
-$map[0x00000001] = "$EVENT_SYSTEM_SOUND"
-$map[0x00000002] = "$EVENT_SYSTEM_ALERT"
-$map[0x00000003] = "$EVENT_SYSTEM_FOREGROUND"
-$map[0x00000004] = "$EVENT_SYSTEM_MENUSTART"
-$map[0x00000005] = "$EVENT_SYSTEM_MENUEND"
-$map[0x00000006] = "$EVENT_SYSTEM_MENUPOPUPSTART"
-$map[0x00000007] = "$EVENT_SYSTEM_MENUPOPUPEND"
-$map[0x00000008] = "$EVENT_SYSTEM_CAPTURESTART"
-$map[0x00000009] = "$EVENT_SYSTEM_CAPTUREEND"
-$map[0x0000000A] = "$EVENT_SYSTEM_MOVESIZESTART"
-$map[0x0000000B] = "$EVENT_SYSTEM_MOVESIZEEND"
-$map[0x0000000C] = "$EVENT_SYSTEM_CONTEXTHELPSTART"
-$map[0x0000000D] = "$EVENT_SYSTEM_CONTEXTHELPEND"
-$map[0x0000000E] = "$EVENT_SYSTEM_DRAGDROPSTART"
-$map[0x0000000F] = "$EVENT_SYSTEM_DRAGDROPEND"
-$map[0x00000010] = "$EVENT_SYSTEM_DIALOGSTART"
-$map[0x00000011] = "$EVENT_SYSTEM_DIALOGEND"
-$map[0x00000012] = "$EVENT_SYSTEM_SCROLLINGSTART"
-$map[0x00000013] = "$EVENT_SYSTEM_SCROLLINGEND"
-$map[0x00000014] = "$EVENT_SYSTEM_SWITCHSTART"
-$map[0x00000015] = "$EVENT_SYSTEM_SWITCHEND"
-$map[0x00000016] = "$EVENT_SYSTEM_MINIMIZESTART"
-$map[0x00000017] = "$EVENT_SYSTEM_MINIMIZEEND"
-$map[0x00000020] = "$EVENT_SYSTEM_DESKTOPSWITCH"
-$map[0x00008000] = "$EVENT_OBJECT_CREATE"
-$map[0x00008001] = "$EVENT_OBJECT_DESTROY"
-$map[0x00008002] = "$EVENT_OBJECT_SHOW"
-$map[0x00008003] = "$EVENT_OBJECT_HIDE"
-$map[0x00008004] = "$EVENT_OBJECT_REORDER"
-$map[0x00008005] = "$EVENT_OBJECT_FOCUS"
-$map[0x00008006] = "$EVENT_OBJECT_SELECTION"
-$map[0x00008007] = "$EVENT_OBJECT_SELECTIONADD"
-$map[0x00008008] = "$EVENT_OBJECT_SELECTIONREMOVE"
-$map[0x00008009] = "$EVENT_OBJECT_SELECTIONWITHIN"
-$map[0x0000800A] = "$EVENT_OBJECT_STATECHANGE"
-$map[0x0000800B] = "$EVENT_OBJECT_LOCATIONCHANGE"
-$map[0x0000800C] = "$EVENT_OBJECT_NAMECHANGE"
-$map[0x0000800D] = "$EVENT_OBJECT_DESCRIPTIONCHANGE"
-$map[0x0000800E] = "$EVENT_OBJECT_VALUECHANGE"
-$map[0x0000800F] = "$EVENT_OBJECT_PARENTCHANGE"
-$map[0x00008010] = "$EVENT_OBJECT_HELPCHANGE"
-$map[0x00008011] = "$EVENT_OBJECT_DEFACTIONCHANGE"
-$map[0x00008012] = "$EVENT_OBJECT_ACCELERATORCHANGE"
-$map[0x00008013] = "$EVENT_OBJECT_INVOKED"
-$map[0x00008014] = "$EVENT_OBJECT_TEXTSELECTIONCHANGED"
-$map[0x00008015] = "$EVENT_OBJECT_CONTENTSCROLLED"
-$map[0x7FFFFFFF] = "$EVENT_MAX"
 While 1
 	If FileExists($stopFile) Then
 		FileDelete($stopFile)
@@ -218,46 +135,42 @@ While 1
 				EndIf
 			Next
 		EndIf
-	Else
-;~ 	Opt("WinTitleMatchMode", 1) ;;
-;~ 	Local $hwnd = WinWaitActive("[TITLE:VCarve Pro]") ;;
-;~ 	If $hwnd <> $prevHwnd Then ;;
-;~ 		$prevHwnd = $hwnd ;;
-;~ 		Local $iPID = WinGetProcess($hwnd) ;;
-;~ 		_WinAPI_UnhookWinEvent($hEventHook) ;;
-;~ 		Global $hEventHook = _WinAPI_SetWinEventHook(0x7FFFFF30, 0x7FFFFF30, DllCallbackGetPtr($hEventProc), $iPID) ;;
-;~ 		ConsoleWrite("PID: " & $iPID & @CRLF) ;;
-;~ 	EndIf ;;
 	EndIf
-	$hwnd = WinGetHandle($class)
+;~ $hwnd = WinGetHandle($class)
 
-	If $hwnd And $hwnd <> $prevHwnd Then
-		$prevHwnd = $hwnd
-		processPopup($hwnd)
-	EndIf
+;~ If $hwnd And $hwnd <> $prevHwnd Then
+;~ 	$prevHwnd = $hwnd
+;~ 	processPopup($hwnd)
+;~ EndIf
 
 	Sleep(10)
 WEnd
-Func _EventProc($hEventHook, $iEvent, $hwnd, $iObjectID, $iChildID, $iThreadId, $iEventTime) ;;
-	ConsoleWrite(($map[$iEvent] ? $map[$iEvent] : "0x" & Hex($iEvent, 8)) & " | " & $iObjectID & " | " & $iChildID & " | " & $iThreadId & " | " & $iEventTime & @CRLF)
-	Opt("WinTitleMatchMode", 3)
-	Local $hPopup = WinGetHandle($class)
-	If $hPopup Then
-		processPopup($hPopup)
-	EndIf
-EndFunc   ;==>_EventProc
 
 Func _exit()
 	DllClose($hUser32_Dll)
-	_WinAPI_UnhookWinEvent($hEventHook) ;;
-	DllCallbackFree($hEventProc) ;;
+	If $hWinHook Then _WinAPI_UnhookWinEvent($hWinHook)
+	If $hHookFunc Then DllCallbackFree($hHookFunc)
 	FileDelete($imagePath)
 	debug("exit")
 EndFunc   ;==>_exit
 
+Func _WinEventProc($hHook, $iEvent, $hwnd, $iObjectID, $iChildID, $iEventThread, $imsEventTime)
+	If WinGetTitle($hwnd) = "VCarve Pro" Then
+		processPopup($hwnd)
+	EndIf
+
+EndFunc   ;==>_WinEventProc
+
 Func closePopup()
+	debug("closepopup")
 	$posWidthDest = 0
 EndFunc   ;==>closePopup
+
+Func iniSave()
+	IniWrite($ini, $iniSection, "move", $settingMove ? 1 : 0)
+	IniWrite($ini, $iniSection, "type", $settingType)
+	IniWrite($ini, $iniSection, "autoStart", $settingAutoStart ? 1 : 0)
+EndFunc   ;==>iniSave
 
 Func movePopup($hPopup, $winPos = WinGetPos($hPopup), $button1Pos = ControlGetPos($hPopup, "", $button1))
 	; Calculate the new window position based on the button position and current cursor position
@@ -352,7 +265,11 @@ Func processPopup($hPopup)
 		debug($sText)
 		debug("text", TimerDiff($start))
 		If Not $sText Or StringRegExp($sText, "(?i)error|exceed") Then
-			movePopup($hPopup, $winPos, $button1Pos)
+			If $settingMove Then
+				movePopup($hPopup, $winPos, $button1Pos)
+			Else
+				WinMove($hPopup, "", $winPos[0], $winPos[1])
+			EndIf
 		Else
 			_WinAPI_BitBlt($hDestDC, 0, 0, $posWidthDest, $posHeight, $hSrcDC, 0, 0, $MERGECOPY)
 			; Set bitmap to control
@@ -363,7 +280,6 @@ Func processPopup($hPopup)
 			EndIf
 
 			If $settingType = 1 Then GUISetState(@SW_SHOWNOACTIVATE)
-			$popupTime = TimerInit()
 			debug("show", TimerDiff($start))
 			Local $TITLE = WinGetTitle($hPopup)
 			If $settingType = 2 Then TrayTip("", $sText, 1, 16)
@@ -371,6 +287,7 @@ Func processPopup($hPopup)
 ;~ ControlClick($hPopup, "", $hButton1) ;shows window context menu for some reason
 ;~ WinClose($hPopup) ;slow, 200ms
 			debug("close", TimerDiff($start))
+			$popupTime = TimerInit()
 		EndIf
 
 		_WinAPI_ReleaseDC($hPic, $hDC)
@@ -381,3 +298,40 @@ Func processPopup($hPopup)
 		_WinAPI_DeleteObject($hBmp)
 	EndIf
 EndFunc   ;==>processPopup
+
+Func setTray()
+	TrayItemSetState($trayMove, $settingMove ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+	TrayItemSetState($trayAutoStart, $settingAutoStart ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+	TrayItemSetState($trayType0, $settingType = 0 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+	TrayItemSetState($trayType1, $settingType = 1 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+	TrayItemSetState($trayType2, $settingType = 2 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+	TrayItemSetState($trayType3, $settingType = 3 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+	If $settingAutoStart Then
+		FileCreateShortcut(@ScriptFullPath, @StartupDir & "\VCarve'er.lnk")
+	Else
+		FileDelete(@StartupDir & "\VCarve'er.lnk")
+	EndIf
+
+EndFunc   ;==>setTray
+
+Func TrayEvent()
+	Switch @TRAY_ID
+		Case $trayMove
+			$settingMove = Not BitAND(TrayItemGetState(@TRAY_ID), $TRAY_CHECKED)
+		Case $trayAutoStart
+			$settingAutoStart = Not BitAND(TrayItemGetState(@TRAY_ID), $TRAY_CHECKED)
+		Case $trayType0
+			$settingType = 0
+		Case $trayType1
+			$settingType = 1
+		Case $trayType2
+			$settingType = 2
+		Case $trayType3
+			$settingType = 3
+		Case $trayExit
+			Exit
+	EndSwitch
+
+	setTray()
+	iniSave()
+EndFunc   ;==>TrayEvent

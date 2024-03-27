@@ -6,3 +6,4 @@ vcarve'er_tidy.txt
 dialog.png
 *.au3
 !vcarve'er.au3
+*.ini
