@@ -1,16 +1,17 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
-#AutoIt3Wrapper_Icon=../resources/vcarverer.ico
-#AutoIt3Wrapper_Outfile=../bin/VCarverer_v1.0.0.exe
+#AutoIt3Wrapper_Icon=../resources/vcarve'er.ico
+#AutoIt3Wrapper_Outfile=../bin/VCarve'er_v1.1.0.exe
 #AutoIt3Wrapper_UseX64=y
 #AutoIt3Wrapper_Compression=4
 #AutoIt3Wrapper_UseUpx=y
-#AutoIt3Wrapper_Res_Description=VCarver'er - show messages popups as toast notifications
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.38
+#AutoIt3Wrapper_Res_Description=VCarve'er
+#AutoIt3Wrapper_Res_Field=Comment|VCarve'er - show messages popups as toast notifications
+#AutoIt3Wrapper_Res_Fileversion=1.1.0.2
 #AutoIt3Wrapper_Res_Fileversion_AutoIncrement=y
-#AutoIt3Wrapper_Res_ProductVersion=1.0.0
+#AutoIt3Wrapper_Res_ProductVersion=1.1.0
 #AutoIt3Wrapper_Res_LegalCopyright=©V@no 2024
 #AutoIt3Wrapper_Res_Language=1033
-#AutoIt3Wrapper_Res_Field=ProductName|VCarver'er
+#AutoIt3Wrapper_Res_Field=ProductName|VCarve'er
 #AutoIt3Wrapper_Res_Field=BuildDate|%longdate%  %time%
 #AutoIt3Wrapper_Run_Tidy=y
 #AutoIt3Wrapper_Run_Au3Stripper=y
@@ -19,10 +20,10 @@
 #AutoIt3Wrapper_Run_Before=cd.>.stop
 #AutoIt3Wrapper_Run_Before=cd.>../bin/.stop
 
-#AutoIt3Wrapper_Run_After=rm ../bin/VCarverer.exe
-#AutoIt3Wrapper_Run_After=mklink /h "../bin/VCarverer.exe" "%out%"
-#AutoIt3Wrapper_Run_After=rm .stop
-#AutoIt3Wrapper_Run_After=rm ../bin/.stop
+#AutoIt3Wrapper_Run_After=del "../bin/VCarve'er.exe"
+#AutoIt3Wrapper_Run_After=mklink /h "../bin/VCarve'er.exe" "%out%"
+#AutoIt3Wrapper_Run_After=del .stop
+#AutoIt3Wrapper_Run_After=del "../bin/.stop"
 
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 
@@ -33,8 +34,10 @@
 #include <UWPOCR.au3>
 ;~ _UWPOCR_Log(__UWPOCR_Log)
 #include <GuiConstants.au3>
+#include <TrayConstants.au3>
 
-Global Const $VERSION = "1.0.0.38"
+Global Const $VERSION = "1.1.0.2"
+Global Const $TITLE = "VCarve'er v" & $VERSION
 Global Const $stopFile = @ScriptDir & "\.stop"
 Global Const $imagePath = "dialog.png" ; temporary image file
 Global Const $timeout = 10000 ; notification message timeout in milliseconds
@@ -47,6 +50,10 @@ Global Const $hToast = GUICreate("", 0, 0, -1, -1, BitOR($WS_POPUP, $WS_BORDER),
 Global Const $idPic = GUICtrlCreatePic('', 0, 0, 0, 0)
 Global Const $hPic = GUICtrlGetHandle($idPic)
 Global Const $hUser32_Dll = DllOpen("user32.dll")
+Global $ini = @ScriptDir & "\VCarve'er.ini"
+Global $iniSection = "Settings"
+Global $settingType = IniRead($ini, $iniSection, "type", 1) ; 0 = default popup; 1 = image; 2 = toast/balloon; 3 = none
+Global $settingMove = IniRead($ini, $iniSection, "move", True) ; move popup to cursor position
 Global $popupTime
 Global $posWidthDest
 Global $posWidth
@@ -58,14 +65,74 @@ Global $step
 Local $hwnd
 Local $prevHwnd
 
-If _Singleton("VCarverer", 1) = 0 Then
+
+If Not FileExists($ini) Then
+	IniWrite($ini, $iniSection, "Move", $settingMove)
+	IniWrite($ini, $iniSection, "Type", $settingType)
+EndIf
+If _Singleton("VCarve'er", 1) = 0 Then
 	Exit
 EndIf
 
 Opt('TrayAutoPause', 0)
+Opt("TrayMenuMode", 7) ; Default tray menu items will not be shown and must be explicitly added
+Opt("TrayOnEventMode", 1) ; Enable TrayOnEventMode.
+
 OnAutoItExitRegister("_exit")
-TraySetToolTip("VCarver'er " & $VERSION)
-FileCreateShortcut(@ScriptFullPath, @StartupDir & "\VCarverer.lnk")
+TraySetToolTip($TITLE)
+TrayCreateItem($TITLE)
+TrayItemSetState(-1, $TRAY_DISABLE)
+TrayCreateItem("")
+Global $trayType = TrayCreateMenu("Notification type")
+Global $trayType0 = TrayCreateItem("Default", $trayType, -1, 1)
+TrayItemSetOnEvent(-1, "TrayEvent")
+Global $trayType1 = TrayCreateItem("Image", $trayType, -1, 1)
+TrayItemSetOnEvent(-1, "TrayEvent")
+Global $trayType2 = TrayCreateItem("System", $trayType, -1, 1)
+TrayItemSetOnEvent(-1, "TrayEvent")
+Global $trayType3 = TrayCreateItem("None", $trayType, -1, 1)
+TrayItemSetOnEvent(-1, "TrayEvent")
+Global $trayMove = TrayCreateItem("Move popups")
+TrayItemSetOnEvent(-1, "TrayEvent")
+TrayCreateItem("")
+Global $trayExit = TrayCreateItem("Exit")
+TrayItemSetOnEvent(-1, "TrayEvent")
+
+setTray()
+Func setTray()
+	TrayItemSetState($trayMove, $settingMove ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+	TrayItemSetState($trayType0, $settingType = 0 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+	TrayItemSetState($trayType1, $settingType = 1 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+	TrayItemSetState($trayType2, $settingType = 2 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+	TrayItemSetState($trayType3, $settingType = 3 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+EndFunc   ;==>setTray
+
+Func iniSave()
+	IniWrite($ini, $iniSection, "Move", $settingMove)
+	IniWrite($ini, $iniSection, "Type", $settingType)
+EndFunc   ;==>iniSave
+Func TrayEvent()
+	Switch @TRAY_ID
+		Case $trayMove
+			$settingMove = Not BitAND(TrayItemGetState($trayMove), $TRAY_CHECKED)
+		Case $trayType0
+			$settingType = 0
+		Case $trayType1
+			$settingType = 1
+		Case $trayType2
+			$settingType = 2
+		Case $trayType3
+			$settingType = 3
+		Case $trayExit
+			Exit
+	EndSwitch
+
+	setTray()
+	iniSave()
+EndFunc   ;==>TrayEvent
+
+
+FileCreateShortcut(@ScriptFullPath, @StartupDir & "\VCarve'er.lnk")
 Global $hEventProc = DllCallbackRegister(_EventProc, 'none', 'ptr;dword;hwnd;long;long;dword;dword')
 Global $hEventHook
 Global $map[]
@@ -218,7 +285,7 @@ Func movePopup($hPopup, $winPos = WinGetPos($hPopup), $button1Pos = ControlGetPo
 	If $newY < $rectY Then $newY = $rectY
 	; Move the message box window to the new position
 	WinMove($hPopup, "", $newX, $newY, $winPos[2], $winPos[3])
-	WinActivate($hPopup)
+;~ WinActivate($hPopup)
 EndFunc   ;==>movePopup
 
 Func processPopup($hPopup)
@@ -228,8 +295,8 @@ Func processPopup($hPopup)
 	Local $hButton1 = ControlGetHandle($hPopup, "", $button1)
 	Local $button1Pos = ControlGetPos($hPopup, "", $hButton1)
 	Local $isConfirm = ControlGetHandle($hPopup, "", $button2)
-	If $isConfirm Then
-		movePopup($hPopup, $winPos, $button1Pos)
+	If $isConfirm Or Not $settingType Then
+		If $settingMove Then movePopup($hPopup, $winPos, $button1Pos)
 	Else
 		WinMove($hPopup, "", $posOut, $posOut)
 		Local $imgPos = $winPos
@@ -264,7 +331,7 @@ Func processPopup($hPopup)
 		$speed = $posWidthDest / $animationSpeed
 		$posWidth = 0
 		$posLeft = $iRight
-		$posTop = $iBottom - $imgPos[3] + ($isWin11 ? 0 : $iBorder)
+		$posTop = $iBottom - $imgPos[3] + ($isWin11 ? -$iBorder * 2 : $iBorder)
 		$posHeight = $imgPos[3] - ($isWin11 ? -$iBorder * 2 : $iBorder)
 		WinMove($hToast, "", $posLeft, $posTop, $posWidth, $posHeight)
 		GUICtrlSetPos($idPic, 0, 0, 0, 0)
@@ -284,7 +351,7 @@ Func processPopup($hPopup)
 		Local $sText = StringStripWS(_UWPOCR_GetText($imagePath, Default, True), 3)
 		debug($sText)
 		debug("text", TimerDiff($start))
-		If Not $sText Or StringRegExp($sText, "error|exceed") Then
+		If Not $sText Or StringRegExp($sText, "(?i)error|exceed") Then
 			movePopup($hPopup, $winPos, $button1Pos)
 		Else
 			_WinAPI_BitBlt($hDestDC, 0, 0, $posWidthDest, $posHeight, $hSrcDC, 0, 0, $MERGECOPY)
@@ -295,13 +362,15 @@ Func processPopup($hPopup)
 				_WinAPI_DeleteObject($hBitmap)
 			EndIf
 
-			GUISetState(@SW_SHOWNOACTIVATE)
+			If $settingType = 1 Then GUISetState(@SW_SHOWNOACTIVATE)
 			$popupTime = TimerInit()
 			debug("show", TimerDiff($start))
-			ControlClick($hPopup, "", $hButton1)
-;~ WinClose($hPopup)
+			Local $TITLE = WinGetTitle($hPopup)
+			If $settingType = 2 Then TrayTip("", $sText, 1, 16)
+			ControlSend($hPopup, "", $hButton1, "{ESC}")
+;~ ControlClick($hPopup, "", $hButton1) ;shows window context menu for some reason
+;~ WinClose($hPopup) ;slow, 200ms
 			debug("close", TimerDiff($start))
-			TrayTip("VCarver'er", $sText, 1)
 		EndIf
 
 		_WinAPI_ReleaseDC($hPic, $hDC)

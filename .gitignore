@@ -1,8 +1,8 @@
 Backup
-vcarverer_tidy.txt
+vcarve'er_tidy.txt
 .stop
 *.exe
 !*_*.*.*.exe
 dialog.png
 *.au3
-!vcarverer.au3
+!vcarve'er.au3
