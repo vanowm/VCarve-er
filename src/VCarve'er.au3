@@ -6,7 +6,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Description=VCarve'er
 #AutoIt3Wrapper_Res_Field=Comment|VCarve'er - show messages popups as toast notifications
-#AutoIt3Wrapper_Res_Fileversion=1.1.0.8
+#AutoIt3Wrapper_Res_Fileversion=1.1.0.9
 #AutoIt3Wrapper_Res_Fileversion_AutoIncrement=y
 #AutoIt3Wrapper_Res_ProductVersion=1.1.0
 #AutoIt3Wrapper_Res_LegalCopyright=©V@no 2024
@@ -36,7 +36,7 @@
 #include <GuiConstants.au3>
 #include <TrayConstants.au3>
 
-Global Const $VERSION = "1.1.0.8"
+Global Const $VERSION = "1.1.0.9"
 Global Const $TITLE = "VCarve'er v" & $VERSION
 Global Const $stopFile = @ScriptDir & "\.stop"
 Global Const $imagePath = "dialog.png" ; temporary image file
@@ -233,19 +233,18 @@ Func processPopup($hPopup)
 			Next
 		EndIf
 		$imgPos[3] -= $imgPos[3] - $button1Pos[1]
-		Local Static $isWin11 = True ;@OSVersion = "WIN_11"
 		Local $iBorder = _WinAPI_GetSystemMetrics($SM_CXSIZEFRAME) / 2 - 0
 		; Extract the coordinates of the primary monitor's display area
 		Local $tRect = _WinAPI_GetWorkArea()
 		; Get the bottom right corner
 		Local $iRight = DllStructGetData($tRect, "Right")
 		Local $iBottom = DllStructGetData($tRect, "Bottom")
-		$posWidthDest = $imgPos[2] - $iBorder * ($isWin11 ? 4 : 2)
+		$posWidthDest = $imgPos[2] - $iBorder * 4
 		$speed = $posWidthDest / $animationSpeed
 		$posWidth = 0
 		$posLeft = $iRight
-		$posTop = $iBottom - $imgPos[3] + ($isWin11 ? -$iBorder * 2 : $iBorder)
-		$posHeight = $imgPos[3] - ($isWin11 ? -$iBorder * 2 : $iBorder)
+		$posTop = $iBottom - $imgPos[3] - $iBorder * 2
+		$posHeight = $imgPos[3] + $iBorder * 2
 		WinMove($hToast, "", $posLeft, $posTop, $posWidth, $posHeight)
 		GUICtrlSetPos($idPic, 0, 0, 0, 0)
 		GUICtrlSetPos($idPic, 0, 0, $posWidthDest, $posHeight)
