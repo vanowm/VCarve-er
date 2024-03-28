@@ -6,7 +6,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Description=VCarve'er
 #AutoIt3Wrapper_Res_Field=Comment|VCarve'er - show messages popups as toast notifications
-#AutoIt3Wrapper_Res_Fileversion=1.1.0.9
+#AutoIt3Wrapper_Res_Fileversion=1.1.0.10
 #AutoIt3Wrapper_Res_Fileversion_AutoIncrement=y
 #AutoIt3Wrapper_Res_ProductVersion=1.1.0
 #AutoIt3Wrapper_Res_LegalCopyright=©V@no 2024
@@ -36,7 +36,7 @@
 #include <GuiConstants.au3>
 #include <TrayConstants.au3>
 
-Global Const $VERSION = "1.1.0.9"
+Global Const $VERSION = "1.1.0.10"
 Global Const $TITLE = "VCarve'er v" & $VERSION
 Global Const $stopFile = @ScriptDir & "\.stop"
 Global Const $imagePath = "dialog.png" ; temporary image file
@@ -281,7 +281,10 @@ Func processPopup($hPopup)
 			If $settingType = 1 Then GUISetState(@SW_SHOWNOACTIVATE)
 			debug("show", TimerDiff($start))
 			Local $TITLE = WinGetTitle($hPopup)
-			If $settingType = 2 Then TrayTip("", $sText, 1, 16)
+			If $settingType = 2 Then
+				TrayTip("", "", 0, 16)
+				TrayTip("", $sText, 1, 16)
+			EndIf
 			ControlSend($hPopup, "", $hButton1, "{ESC}")
 ;~ ControlClick($hPopup, "", $hButton1) ;shows window context menu for some reason
 ;~ WinClose($hPopup) ;slow, 200ms
