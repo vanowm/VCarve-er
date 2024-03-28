@@ -6,7 +6,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Description=VCarve'er
 #AutoIt3Wrapper_Res_Field=Comment|VCarve'er - show messages popups as toast notifications
-#AutoIt3Wrapper_Res_Fileversion=1.1.0.2
+#AutoIt3Wrapper_Res_Fileversion=1.1.0.8
 #AutoIt3Wrapper_Res_Fileversion_AutoIncrement=y
 #AutoIt3Wrapper_Res_ProductVersion=1.1.0
 #AutoIt3Wrapper_Res_LegalCopyright=©V@no 2024
@@ -36,7 +36,7 @@
 #include <GuiConstants.au3>
 #include <TrayConstants.au3>
 
-Global Const $VERSION = "1.1.0.2"
+Global Const $VERSION = "1.1.0.8"
 Global Const $TITLE = "VCarve'er v" & $VERSION
 Global Const $stopFile = @ScriptDir & "\.stop"
 Global Const $imagePath = "dialog.png" ; temporary image file
@@ -233,7 +233,7 @@ Func processPopup($hPopup)
 			Next
 		EndIf
 		$imgPos[3] -= $imgPos[3] - $button1Pos[1]
-		Local Static $isWin11 = @OSVersion = "WIN_11"
+		Local Static $isWin11 = True ;@OSVersion = "WIN_11"
 		Local $iBorder = _WinAPI_GetSystemMetrics($SM_CXSIZEFRAME) / 2 - 0
 		; Extract the coordinates of the primary monitor's display area
 		Local $tRect = _WinAPI_GetWorkArea()
@@ -256,9 +256,9 @@ Func processPopup($hPopup)
 		Local $hSrcDC = _WinAPI_CreateCompatibleDC($hDC)
 		Local $hBmp = _WinAPI_CreateCompatibleBitmap($hDC, $posWidthDest, $posHeight < 40 ? 40 : $posHeight)
 		Local $hSrcSv = _WinAPI_SelectObject($hSrcDC, $hBmp)
-		If $isWin11 Then ControlHide($hToast, "", $hButton1)
+		ControlHide($hToast, "", $hButton1) ;give little extra free space
 		_WinAPI_PrintWindow($hPopup, $hSrcDC, True)
-		If $isWin11 Then ControlShow($hToast, "", $hButton1)
+		ControlShow($hToast, "", $hButton1)
 		debug("print", TimerDiff($start))
 		_ScreenCapture_SaveImage($imagePath, $hBmp, True)
 		Local $sText = StringStripWS(_UWPOCR_GetText($imagePath, Default, True), 3)
