@@ -6,7 +6,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Description=VCarve'er
 #AutoIt3Wrapper_Res_Field=Comment|VCarve'er - show messages popups as toast notifications
-#AutoIt3Wrapper_Res_Fileversion=1.1.0.10
+#AutoIt3Wrapper_Res_Fileversion=1.1.0.13
 #AutoIt3Wrapper_Res_Fileversion_AutoIncrement=y
 #AutoIt3Wrapper_Res_ProductVersion=1.1.0
 #AutoIt3Wrapper_Res_LegalCopyright=©V@no 2024
@@ -36,7 +36,7 @@
 #include <GuiConstants.au3>
 #include <TrayConstants.au3>
 
-Global Const $VERSION = "1.1.0.10"
+Global Const $VERSION = "1.1.0.13"
 Global Const $TITLE = "VCarve'er v" & $VERSION
 Global Const $stopFile = @ScriptDir & "\.stop"
 Global Const $imagePath = "dialog.png" ; temporary image file
@@ -50,21 +50,32 @@ Global Const $hToast = GUICreate("", 0, 0, -1, -1, BitOR($WS_POPUP, $WS_BORDER),
 Global Const $idPic = GUICtrlCreatePic('', 0, 0, 0, 0)
 Global Const $hPic = GUICtrlGetHandle($idPic)
 Global Const $hUser32_Dll = DllOpen("user32.dll")
-Global $ini = @ScriptDir & "\VCarve'er.ini"
 Global $iniSection = "Settings"
-Global $settingType = Number(IniRead($ini, $iniSection, "type", 1)) ; 0 = default popup; 1 = image; 2 = toast/balloon; 3 = none
-Global $settingMove = Number(IniRead($ini, $iniSection, "move", 1)) ; move popup to cursor position
-Global $settingAutoStart = Number(IniRead($ini, $iniSection, "autoStart", 1)) ; auto start with Windows
 Global $popupTime
 Global $posWidthDest
+Global $posWidthDestPrev
 Global $posWidth
 Global $posLeft
 Global $posTop
 Global $posHeight
 Global $speed
 Global $step
+Global $sText
+Global $iRight
 Local $hwnd
 Local $prevHwnd
+Local $name = StringLeft(@ScriptName, StringInStr(@ScriptName, ".", 2, -1) - 1)
+Local $name2 = StringRegExpReplace($name, "[\s_-]+v[0-9]+.*", "")
+Global $ini = @ScriptDir & "\" & $name & ".ini"
+Local $ini2 = @ScriptDir & "\" & $name2 & ".ini"
+
+Local $iniExists = BitOR(FileExists($ini) ? 1 : 0, FileExists($ini2) ? 2 : 0)
+If $iniExists = 2 Or Not $iniExists Then $ini = $ini2
+Global $settingType = Number(IniRead($ini, $iniSection, "type", 1)) ; 0 = default popup; 1 = image; 2 = toast/balloon; 3 = none
+Global $settingMove = Number(IniRead($ini, $iniSection, "move", 1)) ; move popup to cursor position
+Global $settingAutoStart = Number(IniRead($ini, $iniSection, "autoStart", 1)) ; auto start with Windows
+
+
 
 If _Singleton("VCarve'er", 1) = 0 Then
 	Exit
@@ -92,6 +103,9 @@ TrayItemSetOnEvent(-1, "TrayEvent")
 Global $trayMove = TrayCreateItem("Move popups")
 TrayItemSetOnEvent(-1, "TrayEvent")
 Global $trayAutoStart = TrayCreateItem("Auto start")
+TrayItemSetOnEvent(-1, "TrayEvent")
+TrayCreateItem("")
+Global $trayLast = TrayCreateItem("Last message")
 TrayItemSetOnEvent(-1, "TrayEvent")
 TrayCreateItem("")
 Global $trayExit = TrayCreateItem("Exit")
@@ -201,119 +215,148 @@ Func movePopup($hPopup, $winPos = WinGetPos($hPopup), $button1Pos = ControlGetPo
 ;~ WinActivate($hPopup)
 EndFunc   ;==>movePopup
 
-Func processPopup($hPopup)
-	debug("popup detected")
+Func processPopup($hPopup = Null)
+	debug("popup detected", $hPopup)
+	If Not $hPopup And Not $sText Then Return
 	Local $start = TimerInit()
-	Local $winPos = WinGetPos($hPopup)
-	Local $hButton1 = ControlGetHandle($hPopup, "", $button1)
-	Local $button1Pos = ControlGetPos($hPopup, "", $hButton1)
-	Local $isConfirm = ControlGetHandle($hPopup, "", $button2)
+	Local $winPos, $hBUtton1, $button1Pos, $isConfirm
+	If $hPopup Then
+		$winPos = WinGetPos($hPopup)
+		$hBUtton1 = ControlGetHandle($hPopup, "", $button1)
+		$button1Pos = ControlGetPos($hPopup, "", $hBUtton1)
+		$isConfirm = ControlGetHandle($hPopup, "", $button2)
+	EndIf
 	If $isConfirm Or Not $settingType Then
+		$sText = ""
 		If $settingMove Then movePopup($hPopup, $winPos, $button1Pos)
 	Else
-		WinMove($hPopup, "", $posOut, $posOut)
-		Local $imgPos = $winPos
-		If Not $imgPos[3] Then
-			For $i = 0 To 100
-				$imgPos = WinGetPos($hPopup)
-				If $imgPos[3] Then
-					ExitLoop
-				EndIf
-				Sleep(10)
-			Next
-		EndIf
-		If Not $button1Pos[1] Then
-			For $i = 0 To 100
-				$button1Pos = ControlGetPos($hPopup, "", $hButton1)
-				If $button1Pos[1] Then
+		If $hPopup Then
+			WinMove($hPopup, "", $posOut, $posOut)
+			Local $imgPos = $winPos
+			If Not $imgPos[3] Then
+				For $i = 0 To 100
+					$imgPos = WinGetPos($hPopup)
+					If $imgPos[3] Then
+						ExitLoop
+					EndIf
+					Sleep(10)
+				Next
+			EndIf
+			If Not $button1Pos[1] Then
+				For $i = 0 To 100
+					$button1Pos = ControlGetPos($hPopup, "", $hBUtton1)
+					If $button1Pos[1] Then
 
-					ExitLoop
-				EndIf
-				Sleep(10)
-			Next
+						ExitLoop
+					EndIf
+					Sleep(10)
+				Next
+			EndIf
+			$imgPos[3] -= $imgPos[3] - $button1Pos[1]
+			Local $iBorder = _WinAPI_GetSystemMetrics($SM_CXSIZEFRAME) / 2 - 0
+			; Extract the coordinates of the primary monitor's display area
+			Local $tRect = _WinAPI_GetWorkArea()
+			; Get the bottom right corner
+			$iRight = DllStructGetData($tRect, "Right")
+			Local $iBottom = DllStructGetData($tRect, "Bottom")
+			$posWidthDest = $imgPos[2] - $iBorder * 4
+			$posWidthDestPrev = $posWidthDest
+			$speed = $posWidthDest / $animationSpeed
+			$posWidth = 0
+			$posLeft = $iRight
+			$posTop = $iBottom - $imgPos[3] - $iBorder * 2
+			$posHeight = $imgPos[3] + $iBorder * 2
+		Else
+			$posWidthDest = $posWidthDestPrev
+			$posWidth = 0
+			$posLeft = $iRight
+;~ If $speed < 0 Then $speed = -$speed
 		EndIf
-		$imgPos[3] -= $imgPos[3] - $button1Pos[1]
-		Local $iBorder = _WinAPI_GetSystemMetrics($SM_CXSIZEFRAME) / 2 - 0
-		; Extract the coordinates of the primary monitor's display area
-		Local $tRect = _WinAPI_GetWorkArea()
-		; Get the bottom right corner
-		Local $iRight = DllStructGetData($tRect, "Right")
-		Local $iBottom = DllStructGetData($tRect, "Bottom")
-		$posWidthDest = $imgPos[2] - $iBorder * 4
-		$speed = $posWidthDest / $animationSpeed
-		$posWidth = 0
-		$posLeft = $iRight
-		$posTop = $iBottom - $imgPos[3] - $iBorder * 2
-		$posHeight = $imgPos[3] + $iBorder * 2
+		debug($posLeft, $posWidth)
 		WinMove($hToast, "", $posLeft, $posTop, $posWidth, $posHeight)
-		GUICtrlSetPos($idPic, 0, 0, 0, 0)
-		GUICtrlSetPos($idPic, 0, 0, $posWidthDest, $posHeight)
-		Local $hDC = _WinAPI_GetDC($hPic)
-		Local $hDestDC = _WinAPI_CreateCompatibleDC($hDC)
-		Local $hBitmap = _WinAPI_CreateCompatibleBitmap($hDC, $posWidthDest, $posHeight)
-		Local $hDestSv = _WinAPI_SelectObject($hDestDC, $hBitmap)
-		Local $hSrcDC = _WinAPI_CreateCompatibleDC($hDC)
-		Local $hBmp = _WinAPI_CreateCompatibleBitmap($hDC, $posWidthDest, $posHeight < 40 ? 40 : $posHeight)
-		Local $hSrcSv = _WinAPI_SelectObject($hSrcDC, $hBmp)
-		ControlHide($hToast, "", $hButton1) ;give little extra free space
-		_WinAPI_PrintWindow($hPopup, $hSrcDC, True)
-		ControlShow($hToast, "", $hButton1)
-		debug("print", TimerDiff($start))
-		_ScreenCapture_SaveImage($imagePath, $hBmp, True)
-		Local $sText = StringStripWS(_UWPOCR_GetText($imagePath, Default, True), 3)
+		If $hPopup Then
+			GUICtrlSetPos($idPic, 0, 0, 0, 0)
+			GUICtrlSetPos($idPic, 0, 0, $posWidthDest, $posHeight)
+			Local $hDC = _WinAPI_GetDC($hPic)
+			Local $hDestDC = _WinAPI_CreateCompatibleDC($hDC)
+			Local $hBitmap = _WinAPI_CreateCompatibleBitmap($hDC, $posWidthDest, $posHeight)
+			Local $hDestSv = _WinAPI_SelectObject($hDestDC, $hBitmap)
+			Local $hSrcDC = _WinAPI_CreateCompatibleDC($hDC)
+			Local $hBmp = _WinAPI_CreateCompatibleBitmap($hDC, $posWidthDest, $posHeight < 40 ? 40 : $posHeight)
+			Local $hSrcSv = _WinAPI_SelectObject($hSrcDC, $hBmp)
+			ControlHide($hToast, "", $hBUtton1) ;give little extra free space
+			_WinAPI_PrintWindow($hPopup, $hSrcDC, True)
+			ControlShow($hToast, "", $hBUtton1)
+			debug("print", TimerDiff($start))
+			_ScreenCapture_SaveImage($imagePath, $hBmp, True)
+			$sText = StringStripWS(_UWPOCR_GetText($imagePath, Default, True), 3)
+;~ Local $TITLE = WinGetTitle($hPopup)
+		EndIf
 		debug($sText)
 		debug("text", TimerDiff($start))
 		If Not $sText Or StringRegExp($sText, "(?i)error|exceed") Then
-			If $settingMove Then
-				movePopup($hPopup, $winPos, $button1Pos)
-			Else
-				WinMove($hPopup, "", $winPos[0], $winPos[1])
+			$sText = ""
+			If $hPopup Then
+				If $settingMove Then
+					movePopup($hPopup, $winPos, $button1Pos)
+				Else
+					WinMove($hPopup, "", $winPos[0], $winPos[1])
+				EndIf
 			EndIf
 		Else
-			_WinAPI_BitBlt($hDestDC, 0, 0, $posWidthDest, $posHeight, $hSrcDC, 0, 0, $MERGECOPY)
-			; Set bitmap to control
-			_SendMessage($hPic, $STM_SETIMAGE, 0, $hBitmap)
-			Local $hObj = _SendMessage($hPic, $STM_GETIMAGE)
-			If $hObj <> $hBitmap Then
-				_WinAPI_DeleteObject($hBitmap)
+			If $hPopup Then
+				_WinAPI_BitBlt($hDestDC, 0, 0, $posWidthDest, $posHeight, $hSrcDC, 0, 0, $MERGECOPY)
+				; Set bitmap to control
+				_SendMessage($hPic, $STM_SETIMAGE, 0, $hBitmap)
+				Local $hObj = _SendMessage($hPic, $STM_GETIMAGE)
+				If $hObj <> $hBitmap Then
+					_WinAPI_DeleteObject($hBitmap)
+				EndIf
 			EndIf
-
 			If $settingType = 1 Then GUISetState(@SW_SHOWNOACTIVATE)
 			debug("show", TimerDiff($start))
-			Local $TITLE = WinGetTitle($hPopup)
 			If $settingType = 2 Then
 				TrayTip("", "", 0, 16)
 				TrayTip("", $sText, 1, 16)
 			EndIf
-			ControlSend($hPopup, "", $hButton1, "{ESC}")
+			If $hPopup Then
+				ControlSend($hPopup, "", $hBUtton1, "{ESC}")
 ;~ ControlClick($hPopup, "", $hButton1) ;shows window context menu for some reason
 ;~ WinClose($hPopup) ;slow, 200ms
+			EndIf
 			debug("close", TimerDiff($start))
 			$popupTime = TimerInit()
 		EndIf
-
-		_WinAPI_ReleaseDC($hPic, $hDC)
-		_WinAPI_SelectObject($hDestDC, $hDestSv)
-		_WinAPI_SelectObject($hSrcDC, $hSrcSv)
-		_WinAPI_DeleteDC($hDestDC)
-		_WinAPI_DeleteDC($hSrcDC)
-		_WinAPI_DeleteObject($hBmp)
+		If $hPopup Then
+			_WinAPI_ReleaseDC($hPic, $hDC)
+			_WinAPI_SelectObject($hDestDC, $hDestSv)
+			_WinAPI_SelectObject($hSrcDC, $hSrcSv)
+			_WinAPI_DeleteDC($hDestDC)
+			_WinAPI_DeleteDC($hSrcDC)
+			_WinAPI_DeleteObject($hBmp)
+		EndIf
 	EndIf
+	setTray()
 EndFunc   ;==>processPopup
 
-Func setTray()
+Func setTray($line = @ScriptLineNumber)
+	debug("setTray", $line)
 	TrayItemSetState($trayMove, $settingMove ? $TRAY_CHECKED : $TRAY_UNCHECKED)
 	TrayItemSetState($trayAutoStart, $settingAutoStart ? $TRAY_CHECKED : $TRAY_UNCHECKED)
 	TrayItemSetState($trayType0, $settingType = 0 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
 	TrayItemSetState($trayType1, $settingType = 1 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
 	TrayItemSetState($trayType2, $settingType = 2 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
 	TrayItemSetState($trayType3, $settingType = 3 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
-	If $settingAutoStart Then
-		FileCreateShortcut(@ScriptFullPath, @StartupDir & "\VCarve'er.lnk")
+	TrayItemSetState($trayLast, $sText ? $TRAY_ENABLE : $TRAY_DISABLE)
+	If @Compiled Then
+		If $settingAutoStart Then
+			FileCreateShortcut(@ScriptFullPath, @StartupDir & "\VCarve'er.lnk")
+		Else
+			FileDelete(@StartupDir & "\VCarve'er.lnk")
+		EndIf
 	Else
-		FileDelete(@StartupDir & "\VCarve'er.lnk")
+		TrayItemSetState($trayAutoStart, $TRAY_DISABLE)
 	EndIf
-
 EndFunc   ;==>setTray
 
 Func TrayEvent()
@@ -332,6 +375,9 @@ Func TrayEvent()
 			$settingType = 3
 		Case $trayExit
 			Exit
+		Case $trayLast
+			processPopup()
+			Return
 	EndSwitch
 
 	setTray()
