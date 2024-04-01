@@ -5,27 +5,26 @@
 #AutoIt3Wrapper_Compression=4
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Description=VCarve'er
-#AutoIt3Wrapper_Res_Field=Comment|VCarve'er - show messages popups as toast notifications
-#AutoIt3Wrapper_Res_Fileversion=1.1.0.13
+#AutoIt3Wrapper_Res_Fileversion=1.1.0.20
 #AutoIt3Wrapper_Res_Fileversion_AutoIncrement=y
 #AutoIt3Wrapper_Res_ProductVersion=1.1.0
 #AutoIt3Wrapper_Res_LegalCopyright=©V@no 2024
 #AutoIt3Wrapper_Res_Language=1033
+#AutoIt3Wrapper_Res_Field=Comment|VCarve'er - show messages popups as toast notifications
 #AutoIt3Wrapper_Res_Field=ProductName|VCarve'er
 #AutoIt3Wrapper_Res_Field=BuildDate|%longdate%  %time%
-#AutoIt3Wrapper_Run_Tidy=y
-#AutoIt3Wrapper_Run_Au3Stripper=y
-#Au3Stripper_Parameters=/pe /so /rm /rsln
-
 #AutoIt3Wrapper_Run_Before=cd.>.stop
 #AutoIt3Wrapper_Run_Before=cd.>../bin/.stop
-
 #AutoIt3Wrapper_Run_After=del "../bin/VCarve'er.exe"
 #AutoIt3Wrapper_Run_After=mklink /h "../bin/VCarve'er.exe" "%out%"
 #AutoIt3Wrapper_Run_After=del .stop
 #AutoIt3Wrapper_Run_After=del "../bin/.stop"
-
+#AutoIt3Wrapper_Run_Tidy=y
+#AutoIt3Wrapper_Run_Au3Stripper=y
+#AutoIt3Wrapper_AU3Check_Parameters=-w 1 -w 2 -w 3 -w 4 -w 5 -w 6 -w 7
+#Au3Stripper_Parameters=/pe /so /rm /rsln
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
+#ignorefunc _UWPOCR_Log debug
 
 #include <WinAPI.au3>
 #include <_debug.au3>
@@ -36,7 +35,12 @@
 #include <GuiConstants.au3>
 #include <TrayConstants.au3>
 
-Global Const $VERSION = "1.1.0.13"
+If _Singleton("VCarve'er", 1) = 0 Then
+	Exit
+EndIf
+
+
+Global Const $VERSION = "1.1.0.20"
 Global Const $TITLE = "VCarve'er v" & $VERSION
 Global Const $stopFile = @ScriptDir & "\.stop"
 Global Const $imagePath = "dialog.png" ; temporary image file
@@ -50,6 +54,11 @@ Global Const $hToast = GUICreate("", 0, 0, -1, -1, BitOR($WS_POPUP, $WS_BORDER),
 Global Const $idPic = GUICtrlCreatePic('', 0, 0, 0, 0)
 Global Const $hPic = GUICtrlGetHandle($idPic)
 Global Const $hUser32_Dll = DllOpen("user32.dll")
+Global Const $POPUP_DEFAULT = 0
+Global Const $POPUP_IMAGE = 1
+Global Const $POPUP_SYSTEM = 2
+Global Const $POPUP_NONE = 3
+
 Global $iniSection = "Settings"
 Global $popupTime
 Global $posWidthDest
@@ -62,24 +71,18 @@ Global $speed
 Global $step
 Global $sText
 Global $iRight
-Local $hwnd
-Local $prevHwnd
-Local $name = StringLeft(@ScriptName, StringInStr(@ScriptName, ".", 2, -1) - 1)
-Local $name2 = StringRegExpReplace($name, "[\s_-]+v[0-9]+.*", "")
+Global $hwnd
+Global $prevHwnd
+Global $name = StringLeft(@ScriptName, StringInStr(@ScriptName, ".", 2, -1) - 1)
+Global $name2 = StringRegExpReplace($name, "[\s_-]+v[0-9]+.*", "")
 Global $ini = @ScriptDir & "\" & $name & ".ini"
-Local $ini2 = @ScriptDir & "\" & $name2 & ".ini"
+Global $ini2 = @ScriptDir & "\" & $name2 & ".ini"
 
-Local $iniExists = BitOR(FileExists($ini) ? 1 : 0, FileExists($ini2) ? 2 : 0)
+Global $iniExists = BitOR(FileExists($ini) ? 1 : 0, FileExists($ini2) ? 2 : 0)
 If $iniExists = 2 Or Not $iniExists Then $ini = $ini2
-Global $settingType = Number(IniRead($ini, $iniSection, "type", 1)) ; 0 = default popup; 1 = image; 2 = toast/balloon; 3 = none
+Global $settingType = Number(IniRead($ini, $iniSection, "type", $POPUP_IMAGE)) ; 0 = default popup; 1 = image; 2 = toast/balloon; 3 = none
 Global $settingMove = Number(IniRead($ini, $iniSection, "move", 1)) ; move popup to cursor position
 Global $settingAutoStart = Number(IniRead($ini, $iniSection, "autoStart", 1)) ; auto start with Windows
-
-
-
-If _Singleton("VCarve'er", 1) = 0 Then
-	Exit
-EndIf
 
 Opt("WinTitleMatchMode", 3)
 Opt('TrayAutoPause', 0)
@@ -111,9 +114,12 @@ TrayCreateItem("")
 Global $trayExit = TrayCreateItem("Exit")
 TrayItemSetOnEvent(-1, "TrayEvent")
 setTray()
-
-Global $hHookFunc = DllCallbackRegister('_WinEventProc', 'none', 'ptr;uint;hwnd;int;int;uint;uint')
-Global $hWinHook = _WinAPI_SetWinEventHook($EVENT_OBJECT_CREATE, $EVENT_OBJECT_CREATE, DllCallbackGetPtr($hHookFunc))
+Global Const $hMod = _WinAPI_GetModuleHandle(0)
+Global Const $hWinHookFunc = DllCallbackRegister('_WinEventProc', 'none', 'ptr;uint;hwnd;int;int;uint;uint')
+Global $hWinHook = _WinAPI_SetWinEventHook($EVENT_OBJECT_CREATE, $EVENT_OBJECT_CREATE, DllCallbackGetPtr($hWinHookFunc))
+Global Const $hEventHookFunc = DllCallbackRegister("_EventProc", "long", "int;wparam;lparam")
+Global $hMouseHook
+Global $hKeyHook
 
 While 1
 	If FileExists($stopFile) Then
@@ -142,13 +148,14 @@ While 1
 				EndIf
 			EndIf
 		EndIf
-		If $posWidthDest Then
-			For $i = 0 To 255
-				If (_IsPressed(Hex($i), $hUser32_Dll)) Then
-					closePopup()
-				EndIf
-			Next
-		EndIf
+;~ If $posWidthDest Then
+;~ 	For $i = 0 To 255
+;~ 		If (_IsPressed(Hex($i), $hUser32_Dll)) Then
+;~ 			closePopup()
+;~ 			ExitLoop
+;~ 		EndIf
+;~ 	Next
+;~ EndIf
 	EndIf
 ;~ $hwnd = WinGetHandle($class)
 
@@ -160,15 +167,28 @@ While 1
 	Sleep(10)
 WEnd
 
+Func _EventProc($nCode, $wParam, $lParam)
+	If $wParam = $WM_MOUSEMOVE Then Return
+	debug($nCode, $wParam, $lParam)
+	_WinAPI_UnhookWindowsHookEx($hKeyHook)
+	_WinAPI_UnhookWindowsHookEx($hMouseHook)
+	closePopup()
+EndFunc   ;==>_EventProc
+
 Func _exit()
 	DllClose($hUser32_Dll)
 	If $hWinHook Then _WinAPI_UnhookWinEvent($hWinHook)
-	If $hHookFunc Then DllCallbackFree($hHookFunc)
+	If $hWinHookFunc Then DllCallbackFree($hWinHookFunc)
+	DllCallbackFree($hEventHookFunc)
+	_WinAPI_UnhookWindowsHookEx($hKeyHook)
+	_WinAPI_UnhookWindowsHookEx($hMouseHook)
+
 	FileDelete($imagePath)
 	debug("exit")
 EndFunc   ;==>_exit
 
 Func _WinEventProc($hHook, $iEvent, $hwnd, $iObjectID, $iChildID, $iEventThread, $imsEventTime)
+	#forceref $hHook, $iEvent, $iObjectID, $iChildID, $iEventThread, $imsEventTime
 	If WinGetTitle($hwnd) = "VCarve Pro" Then
 		processPopup($hwnd)
 	EndIf
@@ -177,6 +197,7 @@ EndFunc   ;==>_WinEventProc
 
 Func closePopup()
 	debug("closepopup")
+	TrayTip("", "", 0, 16)
 	$posWidthDest = 0
 EndFunc   ;==>closePopup
 
@@ -192,7 +213,6 @@ Func movePopup($hPopup, $winPos = WinGetPos($hPopup), $button1Pos = ControlGetPo
 	Local $newY = MouseGetPos(1) - $button1Pos[1] - $button1Pos[3] * 1.5
 
 	; Check if the new position is outside of the current monitor
-	Local $monitorCount = _WinAPI_GetSystemMetrics(80)
 	Local $monitors = _WinAPI_EnumDisplayMonitors()
 	Local $rectX = 0, $rectY = 0, $rectW = 0, $rectH = 0
 	For $i = 1 To $monitors[0][0]
@@ -275,11 +295,13 @@ Func processPopup($hPopup = Null)
 		debug($posLeft, $posWidth)
 		WinMove($hToast, "", $posLeft, $posTop, $posWidth, $posHeight)
 		If $hPopup Then
+			Local Static $hBitmap
+			_WinAPI_DeleteObject($hBitmap)
 			GUICtrlSetPos($idPic, 0, 0, 0, 0)
 			GUICtrlSetPos($idPic, 0, 0, $posWidthDest, $posHeight)
 			Local $hDC = _WinAPI_GetDC($hPic)
 			Local $hDestDC = _WinAPI_CreateCompatibleDC($hDC)
-			Local $hBitmap = _WinAPI_CreateCompatibleBitmap($hDC, $posWidthDest, $posHeight)
+			$hBitmap = _WinAPI_CreateCompatibleBitmap($hDC, $posWidthDest, $posHeight)
 			Local $hDestSv = _WinAPI_SelectObject($hDestDC, $hBitmap)
 			Local $hSrcDC = _WinAPI_CreateCompatibleDC($hDC)
 			Local $hBmp = _WinAPI_CreateCompatibleBitmap($hDC, $posWidthDest, $posHeight < 40 ? 40 : $posHeight)
@@ -313,9 +335,15 @@ Func processPopup($hPopup = Null)
 					_WinAPI_DeleteObject($hBitmap)
 				EndIf
 			EndIf
-			If $settingType = 1 Then GUISetState(@SW_SHOWNOACTIVATE)
+			If $settingType = $POPUP_IMAGE Then
+				_WinAPI_UnhookWindowsHookEx($hKeyHook)
+				_WinAPI_UnhookWindowsHookEx($hMouseHook)
+				$hKeyHook = _WinAPI_SetWindowsHookEx($WH_KEYBOARD_LL, DllCallbackGetPtr($hEventHookFunc), $hMod)
+				$hMouseHook = _WinAPI_SetWindowsHookEx($WH_MOUSE_LL, DllCallbackGetPtr($hEventHookFunc), $hMod)
+				GUISetState(@SW_SHOWNOACTIVATE)
+			EndIf
 			debug("show", TimerDiff($start))
-			If $settingType = 2 Then
+			If $settingType = $POPUP_SYSTEM Then
 				TrayTip("", "", 0, 16)
 				TrayTip("", $sText, 1, 16)
 			EndIf
@@ -343,11 +371,11 @@ Func setTray($line = @ScriptLineNumber)
 	debug("setTray", $line)
 	TrayItemSetState($trayMove, $settingMove ? $TRAY_CHECKED : $TRAY_UNCHECKED)
 	TrayItemSetState($trayAutoStart, $settingAutoStart ? $TRAY_CHECKED : $TRAY_UNCHECKED)
-	TrayItemSetState($trayType0, $settingType = 0 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
-	TrayItemSetState($trayType1, $settingType = 1 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
-	TrayItemSetState($trayType2, $settingType = 2 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
-	TrayItemSetState($trayType3, $settingType = 3 ? $TRAY_CHECKED : $TRAY_UNCHECKED)
-	TrayItemSetState($trayLast, $sText ? $TRAY_ENABLE : $TRAY_DISABLE)
+	TrayItemSetState($trayType0, $settingType = $POPUP_DEFAULT ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+	TrayItemSetState($trayType1, $settingType = $POPUP_IMAGE ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+	TrayItemSetState($trayType2, $settingType = $POPUP_SYSTEM ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+	TrayItemSetState($trayType3, $settingType = $POPUP_NONE ? $TRAY_CHECKED : $TRAY_UNCHECKED)
+	TrayItemSetState($trayLast, $sText And ($settingType = $POPUP_IMAGE Or $settingType = $POPUP_SYSTEM) ? $TRAY_ENABLE : $TRAY_DISABLE)
 	If @Compiled Then
 		If $settingAutoStart Then
 			FileCreateShortcut(@ScriptFullPath, @StartupDir & "\VCarve'er.lnk")
@@ -366,13 +394,13 @@ Func TrayEvent()
 		Case $trayAutoStart
 			$settingAutoStart = Not BitAND(TrayItemGetState(@TRAY_ID), $TRAY_CHECKED)
 		Case $trayType0
-			$settingType = 0
+			$settingType = $POPUP_DEFAULT
 		Case $trayType1
-			$settingType = 1
+			$settingType = $POPUP_IMAGE
 		Case $trayType2
-			$settingType = 2
+			$settingType = $POPUP_SYSTEM
 		Case $trayType3
-			$settingType = 3
+			$settingType = $POPUP_NONE
 		Case $trayExit
 			Exit
 		Case $trayLast
